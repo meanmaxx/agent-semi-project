@@ -1,0 +1,37 @@
+{
+  "version": "1.0.0",
+  "tools": [
+    {
+      "name": "calculator",
+      "description": "Perform basic mathematical calculations",
+      "category": "utility",
+      "parameters": [
+        {
+          "name": "expression",
+          "type": "string",
+          "description": "Mathematical expression to evaluate (e.g., '2 + 2', '10 * 5')",
+          "required": true
+        }
+      ]
+    },
+    {
+      "name": "web_search",
+      "description": "Search the web for information",
+      "category": "information",
+      "parameters": [
+        {
+          "name": "query",
+          "type": "string",
+          "description": "Search query",
+          "required": true
+        },
+        {
+          "name": "num_results",
+          "type": "integer",
+          "description": "Number of results to return (default: 5)",
+          "required": false
+        }
+      ]
+    }
+  ]
+}
