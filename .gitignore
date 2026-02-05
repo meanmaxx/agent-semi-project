@@ -108,3 +108,8 @@ tmp/
 temp/
 *.tmp
 *.temp
+
+# ----- Database -----
+*.db
+*.sqlite
+*.sqlite3

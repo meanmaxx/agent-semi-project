@@ -1,20 +1,22 @@
 version: '3.8'
 
 services:
-  # vLLM Service
+  # vLLM Service (requires NVIDIA GPU)
   vllm:
-    build:
-      context: ./vllm-service
-      dockerfile: Dockerfile
+    image: vllm/vllm-openai:latest
+    container_name: budget-vllm
     ports:
       - "${VLLM_PORT:-8000}:8000"
     environment:
-      - VLLM_MODEL=${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-      - VLLM_HOST=0.0.0.0
-      - VLLM_PORT=8000
-      - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
-      - TOOL_CALL_PARSER=${TOOL_CALL_PARSER:-hermes}
       - HF_TOKEN=${HF_TOKEN:-}
+    command: >
+      --model ${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      --host 0.0.0.0
+      --port 8000
+      --gpu-memory-utilization ${GPU_MEMORY_UTILIZATION:-0.9}
+      --enable-auto-tool-choice
+      --tool-call-parser ${TOOL_CALL_PARSER:-hermes}
+      --trust-remote-code
     deploy:
       resources:
         reservations:
@@ -23,34 +25,41 @@ services:
               count: 1
               capabilities: [gpu]
     volumes:
-      - ~/.cache/huggingface:/root/.cache/huggingface
+      - huggingface_cache:/root/.cache/huggingface
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 120s
     restart: unless-stopped
+    profiles:
+      - gpu
 
-  # Backend Service
+  # Backend API Service
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    container_name: budget-backend
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     environment:
-      - VLLM_BASE_URL=http://vllm:8000
+      - VLLM_BASE_URL=${VLLM_BASE_URL:-http://vllm:8000}
       - VLLM_MODEL=${VLLM_MODEL:-Qwen/Qwen2.5-7B-Instruct}
-      - BACKEND_HOST=0.0.0.0
-      - BACKEND_PORT=8080
-    depends_on:
-      vllm:
-        condition: service_healthy
+      - TOOL_CALL_PARSER=${TOOL_CALL_PARSER:-hermes}
+      - DATABASE_URL=sqlite:///./data/budget.db
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:80,http://frontend:80}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DEBUG=${DEBUG:-false}
+    volumes:
+      - backend_data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 10s
     restart: unless-stopped
 
   # Frontend Service
@@ -58,15 +67,21 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=
+    container_name: budget-frontend
     ports:
-      - "${FRONTEND_PORT:-5173}:80"
-    environment:
-      - VITE_API_URL=http://localhost:${BACKEND_PORT:-8080}
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      backend:
-        condition: service_healthy
+      - backend
     restart: unless-stopped
+
+volumes:
+  backend_data:
+    driver: local
+  huggingface_cache:
+    driver: local
 
 networks:
   default:
-    name: agent-network
+    name: budget-network
